@@ -2,8 +2,8 @@
 
 resolve redis dump.rdb file
 
-==========
 High Level Algorithm to parse RDB
+==========
 
 At a high level, the RDB file has the following structure
 <pre><code>
