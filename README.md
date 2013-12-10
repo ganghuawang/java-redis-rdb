@@ -1,6 +1,6 @@
 #java-redis-rdb#
 
-resolve redis dump.rdb file
+parse redis dump.rdb file
 
 High Level Algorithm to parse RDB
 ==========
