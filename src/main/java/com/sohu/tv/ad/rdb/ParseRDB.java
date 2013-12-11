@@ -82,8 +82,7 @@ public class ParseRDB {
 
     public static final int REDIS_RDB_ENC_INT32 = 2; /* 32 bit signed integer */
 
-    public static final int REDIS_RDB_ENC_LZF = 3; /* string compressed with
-                                                    * FASTLZ
+    public static final int REDIS_RDB_ENC_LZF = 3; /* string compressed with FASTLZ
                                                     */
 
     private static void ERROR(String msg, Object... args) {
@@ -96,13 +95,14 @@ public class ParseRDB {
      * 对Redis数据的封装
      */
     public static class Entry {
-        String key;
-        Object value;
+        public String key;
+        public Object value;
         int type;	/* redis数据类型 */
         byte success;
-        int expire; /* 过期时间 , 剩余的存活时间 , 单位秒 */
+        public int expire; /* 过期时间 , milliseconds*/
     };
 
+    
     private static byte[] chars2bytes(String str) {
         try {
             return str.getBytes("ASCII");
@@ -110,24 +110,23 @@ public class ParseRDB {
             return str.getBytes();
         }
     }
-
-    private static int memcmp(byte[] buf1, int start1, byte[] buf2, int start2,
-            int len) {
-        int pos1 = start1;
-        int pos2 = start2;
-        for (int i = 0; i < len; i++) {
-            pos1 = start1 + i;
-            pos2 = start2 + i;
-            if (buf1.length <= pos1 && buf2.length <= pos2)
-                return 0;
-            if (buf1.length <= pos1)
-                return -1;
-            if (buf2.length <= pos2)
-                return 1;
-            if (buf1[pos1] != buf2[pos2])
-                return buf1[pos1] > buf2[pos2] ? 1 : -1;
+    
+    /* Redis文件头部，必须以"REDIS"字符串开头 **/
+    private boolean processHeader() {
+        byte[] buf = new byte[9];
+        int dump_version;
+        if (!readBytes(buf, 0, 9)) {
+            ERROR("Cannot read header\n");
         }
-        return 0;
+        /* expect the first 5 bytes to equal REDIS */
+        if (memcmp(buf, 0, chars2bytes("REDIS"), 0, 5) != 0) {
+            ERROR("Wrong signature in header\n");
+        }
+        dump_version = (int) strtol(buf, 5, 10);
+        if (dump_version < 1 || dump_version > 6) {
+            ERROR("Unknown RDB format version: %d\n", dump_version);
+        }
+        return true;
     }
 
     private static long strtol(byte[] buf, int start, int radix) {
@@ -163,23 +162,35 @@ public class ParseRDB {
         }
     }
 
-    private boolean processHeader() {
-        byte[] buf = new byte[9];
-        int dump_version;
-        if (!readBytes(buf, 0, 9)) {
-            ERROR("Cannot read header\n");
+    /**
+     * 把两个byte数组进行对比，判断是否相等
+     * @param buf1
+     * @param start1
+     * @param buf2
+     * @param start2
+     * @param len 对比的长度
+     * @return
+     */
+    private static int memcmp(byte[] buf1, int start1, byte[] buf2, int start2,
+            int len) {
+        int pos1 = start1;
+        int pos2 = start2;
+        for (int i = 0; i < len; i++) {
+            pos1 = start1 + i;
+            pos2 = start2 + i;
+            if (buf1.length <= pos1 && buf2.length <= pos2)
+                return 0;
+            if (buf1.length <= pos1)
+                return -1;
+            if (buf2.length <= pos2)
+                return 1;
+            if (buf1[pos1] != buf2[pos2])
+                return buf1[pos1] > buf2[pos2] ? 1 : -1;
         }
-        /* expect the first 5 bytes to equal REDIS */
-        if (memcmp(buf, 0, chars2bytes("REDIS"), 0, 5) != 0) {
-            ERROR("Wrong signature in header\n");
-        }
-        dump_version = (int) strtol(buf, 5, 10);
-        if (dump_version < 1 || dump_version > 6) {
-            ERROR("Unknown RDB format version: %d\n", dump_version);
-        }
-        return true;
+        return 0;
     }
-
+    
+    /* 解析数据类型，占用一个字节  **/
     private boolean loadType(Entry e) {
         /* this byte needs to qualify as type */
         byte[] tt = new byte[1];
@@ -237,6 +248,7 @@ public class ParseRDB {
                 + ((buf[1] & 0x00ff) << 8) + ((buf[0] & 0x00ff));
     }
 
+    /* 解析第一个字节，返回值表示此段数据占用字节的长度 **/
     private long loadLength(Pointer<Boolean> isencoded) {
         byte[] buf = new byte[2];
         int type;
@@ -268,6 +280,7 @@ public class ParseRDB {
         }
     }
     
+    /* 解析一个整型数据  **/
     String loadIntegerObject(int enctype) {
         byte[] enc = new byte[4];
         long val;
@@ -314,7 +327,7 @@ public class ParseRDB {
         }
 
         byte[] s = new byte[(int) slen];
-        LZFDecompress.expand(c, 0, (int) clen, s, 0, (int) slen);
+        LZFCompress.expand(c, 0, (int) clen, s, 0, (int) slen);
         return s;
     }
 
@@ -379,6 +392,7 @@ public class ParseRDB {
         return buf;
     }
 
+    /* double数据 **/
     Double loadDoubleValue() {
         byte[] buf = new byte[256];
         byte[] lenArray = new byte[1];

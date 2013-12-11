@@ -6,12 +6,12 @@ package com.sohu.tv.ad.rdb;
 
 /**
  * 
- * 对用LZF压缩的字符串进行解压
+ * 使用LZF算法对字符串的压缩和解压
  * @author Wang GangHua
  * @version 1.0.0 2013-11-30
  *
  */
-public final class LZFDecompress{
+public final class LZFCompress{
 
     /**
      * The number of entries in the hash table. The size is a trade-off between
