@@ -220,8 +220,9 @@ public class ParseRDB {
     }
 
     /* 获取过期时间, byte数组需转换为Long */
-    byte[] processTime(int length) {
-        byte[] t = new byte[length];
+    byte[] processTime(int type) {
+    	int timelen = (type == REDIS_EXPIRETIME_FC) ? 8 : 4;
+        byte[] t = new byte[8];
         if (readBytes(t, 0, length)) {
             return t;
         } else {
@@ -611,7 +612,7 @@ public class ParseRDB {
         } else {
             /* optionally consume expire */
             if (e.type == REDIS_EXPIRETIME_FD || e.type == REDIS_EXPIRETIME_FC) {
-            	byte[] buf = processTime(8);
+            	byte[] buf = processTime(e.type);
                 if ( buf == null){
                     return e;
                 }else {
