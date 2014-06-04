@@ -32,9 +32,10 @@ public class RDBToSSDB {
         	}
             entry = rdb.next();
             if(count.get() % 100000 ==0){
-            	System.out.println(count.get() + ".............................");
+            	System.out.print(".");
             }
         }
+        System.out.println("");
         rdb.close();
         out.flush();
         out.close();
