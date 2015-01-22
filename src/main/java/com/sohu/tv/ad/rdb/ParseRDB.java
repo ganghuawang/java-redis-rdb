@@ -244,6 +244,7 @@ public class ParseRDB {
         }
     }
 
+    // RDB version 6 下为 big endian format
     private long ntohl(byte[] buf) {
         return ((buf[0] & 0x00ff) << 24) + ((buf[1] & 0x00ff) << 16)
                 + ((buf[2] & 0x00ff) << 8) + ((buf[3] & 0x00ff));
