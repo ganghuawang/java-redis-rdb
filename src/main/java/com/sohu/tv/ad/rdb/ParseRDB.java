@@ -15,15 +15,15 @@ import java.util.List;
 import java.util.TreeMap;
 
 /**
- * 
+ *
  * 解析redis的dump.rdb文件, 可以支持最新的RDB第6版本
  * RBD文件格式可以参照 : https://github.com/sripathikrishnan/redis-rdb-tools/wiki/Redis-RDB-Dump-File-Format
- * 
+ *
  * @author Wang GangHua
  * @version 1.0.0 2013-11-30
  */
 public class ParseRDB {
-	
+
     /* Redis数据类型 */
     public static final int REDIS_STRING = 0;
 
@@ -42,10 +42,10 @@ public class ParseRDB {
     public static final int REDIS_SET_INTSET = 11;
 
     public static final int REDIS_ZSET_ZIPLIST = 12;
-    
+
     public static final int REDIS_HASH_ZIPLIST = 13;
 
-    
+
     public static final int REDIS_ENCODING_RAW = 0; /* Raw representation */
 
     public static final int REDIS_ENCODING_INT = 1; /* Encoded as integer */
@@ -56,7 +56,7 @@ public class ParseRDB {
 
     /* Redis的特殊标示 */
     public static final int REDIS_EXPIRETIME_FC = 252; /* 毫秒级过期时间,占用8个字节 */
-    
+
     public static final int REDIS_EXPIRETIME_FD = 253;	/* 秒级过期时间 ,占用8个字节 */
 
     public static final int REDIS_SELECTDB = 254;	/* 数据库 (后面紧接着的就是数据库编号) */
@@ -72,7 +72,7 @@ public class ParseRDB {
     public static final int REDIS_RDB_ENCVAL = 3;
 
     public static final long REDIS_RDB_LENERR = Long.MAX_VALUE;
-    
+
     /*
      * 整型数字的编码方式
      */
@@ -97,12 +97,12 @@ public class ParseRDB {
     public static class Entry {
         public String key;
         public Object value;
-        int type;	/* redis数据类型 */
+        public int type;	/* redis数据类型 */
         byte success;
         public int expire; /* 过期时间 , milliseconds*/
     };
 
-    
+
     private static byte[] chars2bytes(String str) {
         try {
             return str.getBytes("ASCII");
@@ -110,7 +110,7 @@ public class ParseRDB {
             return str.getBytes();
         }
     }
-    
+
     /* Redis文件头部，必须以"REDIS"字符串开头 **/
     private boolean processHeader() {
         byte[] buf = new byte[9];
@@ -142,7 +142,7 @@ public class ParseRDB {
         String str = new String(c);
         return Long.parseLong(str, radix);
     }
-    
+
     private boolean readBytes(byte[] buf, int start, int num) {
         RandomAccessFile p = position;
         boolean peek = (num < 0) ? true : false;
@@ -189,7 +189,7 @@ public class ParseRDB {
         }
         return 0;
     }
-    
+
     /* 解析数据类型，占用一个字节  **/
     private boolean loadType(Entry e) {
         /* this byte needs to qualify as type */
@@ -223,7 +223,7 @@ public class ParseRDB {
     byte[] processTime(int type) {
     	int timelen = (type == REDIS_EXPIRETIME_FC) ? 8 : 4;
         byte[] t = new byte[8];
-        if (readBytes(t, 0, length)) {
+        if (readBytes(t, 0, timelen)) {
             return t;
         } else {
             ERROR("Could not read time");
@@ -245,8 +245,8 @@ public class ParseRDB {
     }
 
     private long ntohl(byte[] buf) {
-        return ((buf[3] & 0x00ff) << 24) + ((buf[2] & 0x00ff) << 16)
-                + ((buf[1] & 0x00ff) << 8) + ((buf[0] & 0x00ff));
+        return ((buf[0] & 0x00ff) << 24) + ((buf[1] & 0x00ff) << 16)
+                + ((buf[2] & 0x00ff) << 8) + ((buf[3] & 0x00ff));
     }
 
     /* 解析第一个字节，返回值表示此段数据占用字节的长度 **/
@@ -280,7 +280,7 @@ public class ParseRDB {
             return ntohl(buf);
         }
     }
-    
+
     /* 解析一个整型数据  **/
     String loadIntegerObject(int enctype) {
         byte[] enc = new byte[4];
@@ -313,7 +313,7 @@ public class ParseRDB {
             return new String(s);
         }
     }
-    
+
     byte[] loadLzfStringObjectBytes() {
         long slen, clen;
         if ((clen = loadLength(null)) == REDIS_RDB_LENERR)
@@ -366,7 +366,7 @@ public class ParseRDB {
             return new String(buf);
         }
     }
-    
+
     byte[] loadStringObjectBytes() {
         Pointer<Boolean> isencoded = new Pointer<Boolean>();
         long len;
@@ -471,7 +471,7 @@ public class ParseRDB {
             	List<String> lists = new ArrayList<String>();
             	ZipList zipList = new ZipList(loadStringObjectBytes());
             	int entryCountList = zipList.decodeEntryCount();
-            	
+
             	for (int j = 0; j < entryCountList; j++) {
             		if(zipList.getEndByte() == ZipList.ZIPLIST_END){	// 0xff为ziplist的结束符
             			break;
@@ -490,7 +490,7 @@ public class ParseRDB {
             	/* 将整个Hashmap in Ziplist的内容以byte数组读出来，再进行解析 */
             	ZipList zipLit = new ZipList(loadStringObjectBytes());
             	int entryCount = zipLit.decodeEntryCount();
-            	
+
             	for (int j = 0; j < entryCount/2; j++) {
             		if(zipLit.getEndByte() == ZipList.ZIPLIST_END){	// 0xff为ziplist的结束符
             			break;
@@ -625,7 +625,7 @@ public class ParseRDB {
                 }
                 if (!loadType(e))
                     return e;
-            } 
+            }
 
             if (!loadPair(e)) {
                 ERROR("Error for type %d", e.type);
@@ -647,7 +647,7 @@ public class ParseRDB {
 
         return e;
     }
-    
+
     public Entry next() {
         Entry entry = loadEntry();
         if (entry.success != 1)
@@ -680,7 +680,7 @@ public class ParseRDB {
             position.close();
             position = null;
         } catch (Exception e) {
-            
+
         }
     }
 
