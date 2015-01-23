@@ -4,10 +4,9 @@
  */
 package com.sohu.tv.ad.rdb;
 
-import java.io.File;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.io.UnsupportedEncodingException;
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -89,7 +88,11 @@ public class ParseRDB {
         throw new RuntimeException(String.format(msg, args));
     }
 
-    RandomAccessFile position = null;	//二进制方式读取RDB文件
+    private static final int BUFFER_SIZE = 8 * 1024;
+
+    FileChannel filech = null;
+
+    ByteBuffer bytebuffer = null;
 
     /*
      * 对Redis数据的封装
@@ -100,7 +103,7 @@ public class ParseRDB {
         public int type;	/* redis数据类型 */
         byte success;
         public int expire; /* 过期时间 , milliseconds*/
-    };
+    }
 
 
     private static byte[] chars2bytes(String str) {
@@ -144,22 +147,33 @@ public class ParseRDB {
     }
 
     private boolean readBytes(byte[] buf, int start, int num) {
-        RandomAccessFile p = position;
-        boolean peek = (num < 0) ? true : false;
-        num = (num < 0) ? -num : num;
-        try {
-            if (p.getFilePointer() + num > p.length()) {
-                return false;
-            } else {
-                p.readFully(buf, start, num);
-                if (peek) {
-                    p.seek(p.getFilePointer() - num);
+        if (num < 0) {
+            ERROR("Num must bigger than zero");
+        }
+
+        int nget = Math.min(bytebuffer.remaining(), num);
+        bytebuffer.get(buf, start, nget);
+        while (nget < num) {
+            start = start + nget;
+            num = num - nget;
+            bytebuffer.clear();
+            int nRead = 0;
+            while (nRead == 0) {
+                try {
+                    nRead = filech.read(bytebuffer);
+                } catch (IOException e) {
+                    return false;
+                }
+                if (nRead == -1) {
+                    return false;
                 }
             }
-            return true;
-        } catch (IOException e) {
-            return false;
+            bytebuffer.position(0);
+            bytebuffer.limit(nRead);
+            nget = Math.min(bytebuffer.remaining(), num);
+            bytebuffer.get(buf, start, nget);
         }
+        return true;
     }
 
     /**
@@ -252,7 +266,7 @@ public class ParseRDB {
 
     /* 解析第一个字节，返回值表示此段数据占用字节的长度 **/
     private long loadLength(Pointer<Boolean> isencoded) {
-        byte[] buf = new byte[2];
+        byte[] buf = new byte[4];
         int type;
 
         if (isencoded != null)
@@ -275,7 +289,6 @@ public class ParseRDB {
             return ((buf[0] & 0x003F) << 8) | (buf[1] & 0x00ff);
         } else {
             /* Read a 32 bit len */
-            buf = new byte[4];
             if (!readBytes(buf, 0, 4))
                 return REDIS_RDB_LENERR;
             return ntohl(buf);
@@ -361,11 +374,7 @@ public class ParseRDB {
         if (!readBytes(buf, 0, (int) len)) {
             return null;
         }
-        try {
-            return new String(buf, "ASCII");
-        } catch (UnsupportedEncodingException e) {
-            return new String(buf);
-        }
+        return new String(buf);
     }
 
     byte[] loadStringObjectBytes() {
@@ -599,16 +608,7 @@ public class ParseRDB {
                 return e;
             }
         } else if (e.type == REDIS_EOF) {
-            try {
-            	// Starting with RDB version 5, an 8 byte CRC 32 checksum is added to the end of the file.
-                if (position.getFilePointer()+8 < position.length()) {
-                    ERROR("Unexpected EOF");
-                } else {
-                    e.success = 1;
-                }
-            } catch (IOException e1) {
-                ERROR("Unexpected Exception");
-            }
+            e.success = 1;
             return e;
         } else {
             /* optionally consume expire */
@@ -638,13 +638,14 @@ public class ParseRDB {
          * all entries are followed by a valid type: e.g. a new entry, SELECTDB,
          * EXPIRE, EOF
          */
-        if (peekType() == -1) {
+        e.success = 1;
+        /* if (peekType() == -1) {
             ERROR("Followed by invalid type");
             ERROR("Error for type %d", e.type);
             e.success = 0;
         } else {
             e.success = 1;
-        }
+        }*/
 
         return e;
     }
@@ -665,24 +666,24 @@ public class ParseRDB {
 
     public void init(File file) {
         try {
-            position = new RandomAccessFile(file, "r");
+            filech = new FileInputStream(file).getChannel();
+            bytebuffer = ByteBuffer.allocateDirect(BUFFER_SIZE);
+            bytebuffer.position(0);
+            bytebuffer.limit(0);
             processHeader();
         } catch (Exception e) {
             try {
-                position.close();
-            }catch (Exception e1) {
-            }
+                filech.close();
+            } catch (Exception e1) {}
             throw new RuntimeException("Found exceptions when opening file", e);
         }
     }
 
     public void close(){
         try {
-            position.close();
-            position = null;
-        } catch (Exception e) {
-
-        }
+            filech.close();
+            filech = null;
+        } catch (Exception e) {}
     }
 
 }
