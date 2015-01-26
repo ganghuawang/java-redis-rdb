@@ -21,7 +21,7 @@ public class RDBToSSDB {
         BufferedWriter out = new BufferedWriter(new FileWriter(output), 1024 * 1024);
         ParseRDB rdb = new ParseRDB();
         rdb.init(new File(input));
-        Entry entry = rdb.next();
+        ParseRDB.Entry entry = rdb.next();
         
         while(entry!=null){
         	

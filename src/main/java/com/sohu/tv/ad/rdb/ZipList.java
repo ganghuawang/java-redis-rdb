@@ -7,14 +7,14 @@ package com.sohu.tv.ad.rdb;
 import java.io.UnsupportedEncodingException;
 
 /**
- * 
+ *
  * 解析ZipList类型数据
  * @author Wang GangHua
  * @version 1.0.0 2013-11-31
  *
  */
 public class ZipList {
-	
+
 	public static final int ZIPLIST_PREV_ENTRY_LENGTH=254;
 	public static final int ZIPLIST_END=255;	//zip list结束符
 	/**
@@ -24,30 +24,30 @@ public class ZipList {
     public static final int ZIPLIST_ENTRY_FLAG_14BITLEN = 1;
     public static final int ZIPLIST_ENTRY_FLAG_5BYTELEN = 2; 	//5字节用于计数
     public static final int ZIPLIST_ENTRY_FLAG_N2BYTEVLAUE = 12;	//后面2字节的无符号整数就是entry值
-    public static final int ZIPLIST_ENTRY_FLAG_N4BYTEVLAUE = 13;	
+    public static final int ZIPLIST_ENTRY_FLAG_N4BYTEVLAUE = 13;
     public static final int ZIPLIST_ENTRY_FLAG_N8BYTEVLAUE = 14;
-    public static final int ZIPLIST_ENTRY_FLAG_N3BYTEVLAUE = 0x00f0;
-    public static final int ZIPLIST_ENTRY_FLAG_N1BYTEVLAUE = 0x00fe;
-	
-	
+    public static final int ZIPLIST_ENTRY_FLAG_N3BYTEVLAUE = 0;
+    public static final int ZIPLIST_ENTRY_FLAG_N1BYTEVLAUE = 14;
+
+
 	private final byte[] ziplistByte;	//zip list数据
 	private int index; //byte数组下标
-	
+
 	public ZipList(byte[] ziplistByte) {
 		super();
 		this.ziplistByte = ziplistByte;
-		/* 
+		/*
 		 * 从第9个字节开始，跳过前面8个字节，其中前4个字节表示ziplist的长度，
-		 * 后4个字节表示最后一个entry在ziplist中的相对偏移量 
+		 * 后4个字节表示最后一个entry在ziplist中的相对偏移量
 		 * */
 		this.index = 8;
 	}
-	
+
 	int getEndByte(){
 		return ziplistByte[index];
 	}
-	
-	/* 
+
+	/*
 	 * 占1或5个字节,表示前一个entry的字节长度，第一个entry是0
 	 * 如果第一个字节整型值等于254,则后面的4个字节表示长度,否则第一个字节整型值就是长度
      * */
@@ -59,7 +59,7 @@ public class ZipList {
 			index = index + 5;
 		}
 	}
-    
+
 	 /*
 	  * 前一个entry占用的字节数
 	  * */
@@ -73,27 +73,27 @@ public class ZipList {
 				+ ((ziplistByte[index + 1] & 0x00ff));
 		return len;
 	}
-    
+
 	public int decodeEntryCount() {
-		/* 
-		 * 占2个字节,entry的个数,key和value都是一个entry,所以解析Map的for循环次数要除以2 
+		/*
+		 * 占2个字节,entry的个数,key和value都是一个entry,所以解析Map的for循环次数要除以2
 		 * */
 		int entryCount = (((ziplistByte[index + 1] & 0x003F) << 8) | (ziplistByte[index] & 0x00ff));
 		// 解析了2个字节，下标移动2个位置
 		index = index + 2;
 		return entryCount;
 	}
-	
+
 	/**
 	 * entry的value
 	 * @return
 	 */
 	public String decodeEntryValue() {
 		decodePrevEntryFlag();
-		
+
 		Integer[] object = decodeEntrySpecialFlag();
 		int entryDataByteLen = object[0];	// entry数据的字节长度
-		
+
 		String value;
 		if(object[1] != null){
 			value = String.valueOf(object[1]);
@@ -103,7 +103,7 @@ public class ZipList {
 		index = index + entryDataByteLen;
     	return value;
     }
-	
+
     /**
      * special flag,占用字节数1到9之间, 用于表示entry数据占的字节长度或entry的整型值
      * @param value
@@ -115,23 +115,12 @@ public class ZipList {
         int flagLen=1;
         int entryLen=0;
         Integer intValue = null;
-        
+
 		for (int i = 0; i < buf.length && ((index + i) < ziplistByte.length); i++) {
 			buf[i] = ziplistByte[index + i];
 		}
         int type = (buf[0] & 0x00C0) >> 6;
-        if (buf[0] == ZIPLIST_ENTRY_FLAG_N1BYTEVLAUE) {
-        	/* Read next 1 byte integer value */
-        	flagLen = 1 ;
-        	entryLen = 1;
-			intValue = (0x00ff & buf[1]);
-		} else if (buf[0] == ZIPLIST_ENTRY_FLAG_N3BYTEVLAUE) {
-			/* Read next 3 byte integer value */
-			flagLen = 1;
-			entryLen = 3;
-			intValue = ((buf[3] & 0x00ff) << 16) + ((buf[2] & 0x00ff) << 8)
-					+ ((buf[1] & 0x00ff));
-		} else if (type == ZIPLIST_ENTRY_FLAG_6BITLEN) {
+        if (type == ZIPLIST_ENTRY_FLAG_6BITLEN) {
 			/* Read a 6 bit len */
         	flagLen = 1 ;
         	entryLen = (buf[0] & 0x003F);
@@ -145,7 +134,7 @@ public class ZipList {
 			entryLen = ((buf[4] & 0x00ff) << 32) + ((buf[3] & 0x00ff) << 24)
 					+ ((buf[2] & 0x00ff) << 16) + ((buf[1] & 0x00ff) << 8)
 					+ ((buf[0] & 0x003F));
-		} else {
+		} else { // buf[0] == 11xx xxxx
 			type = (buf[0] & 0x00f0) >> 4;
 			if (type == ZIPLIST_ENTRY_FLAG_N2BYTEVLAUE) {
 				/* Read next 2 byte integer value */
@@ -168,22 +157,34 @@ public class ZipList {
 						+ ((buf[5] & 0x00ff) << 32) + ((buf[4] & 0x00ff) << 24)
 						+ ((buf[3] & 0x00ff) << 16) + ((buf[2] & 0x00ff) << 8)
 						+ ((buf[1] & 0x00ff));
-			} else if (type == 15) {
-				/* Read next 8 byte integer value */
-				flagLen = 1;
-				entryLen = (buf[0] & 0x000f);
-			} else {
-				ERROR(" Unknown entry special flag encoding (0x%02x) ", type);
+			} else { // buf[0] == 1111 xxxx
+				type = (buf[0] & 0x000f);
+				if (type == ZIPLIST_ENTRY_FLAG_N1BYTEVLAUE) {
+        			/* Read next 1 byte integer value */
+					flagLen = 1 ;
+					entryLen = 1;
+					intValue = (0x00ff & buf[1]);
+				} else if (type == ZIPLIST_ENTRY_FLAG_N3BYTEVLAUE) {
+					/* Read next 3 byte integer value */
+					flagLen = 1;
+					entryLen = 3;
+					intValue = ((buf[3] & 0x00ff) << 16) + ((buf[2] & 0x00ff) << 8)
+							+ ((buf[1] & 0x00ff));
+				} else if (type > ZIPLIST_ENTRY_FLAG_N3BYTEVLAUE && type < ZIPLIST_ENTRY_FLAG_N1BYTEVLAUE) { // 0 < type < 14
+					/* Read immediate 4 bit integer value */
+					flagLen = 1;
+					entryLen = 0;
+					intValue = type - 1;
+				} else { // buf[0] == 1111 1111
+					ERROR(" Unknown entry special flag encoding (0x%02x) ");
+				}
 			}
 		}
-        if(entryLen == 0){
-        	ERROR(" entryLen is not 0 (0x%02x) ", entryLen);
-        }
         // 解析完special flag后, index往下移
         index = index + flagLen;
         return new Integer[]{entryLen, intValue};
     }
-    
+
     static byte[] subbyte(byte[] buf, int start, int len){
     	byte[] value = new byte[len];
     	for (int i=0; i<len; start++,i++) {
@@ -191,7 +192,7 @@ public class ZipList {
 		}
     	return value;
     }
-    
+
 	static String byteToString(byte[] buf) {
 		try {
 			return new String(buf, "ASCII");
@@ -199,9 +200,9 @@ public class ZipList {
 			return new String(buf);
 		}
 	}
-    
+
     static void ERROR(String msg, Object... args) {
         throw new RuntimeException(String.format(msg, args));
     }
-	
+
 }
