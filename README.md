@@ -1,6 +1,6 @@
 #java-redis-rdb#
 
-Use java parse redis dump.rdb file
+Using java parsing redis dump.rdb file
 
 High Level Algorithm to parse RDB
 ==========
